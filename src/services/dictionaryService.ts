@@ -148,6 +148,19 @@ function humanizeDefinition(def: string): { text: string; isInflection: boolean;
   return { text: cleaned, isInflection: false };
 }
 
+// ── Truncate long definitions ───────────────────────────────────────────
+
+function truncateDefinition(def: string): string {
+  // Take just the first sentence or clause
+  const firstSentence = def.split(/[.;]/).filter((s) => s.trim().length > 0)[0]?.trim();
+  if (!firstSentence) return def.slice(0, 80);
+  // Cap at reasonable length
+  if (firstSentence.length > 100) {
+    return firstSentence.slice(0, 97) + '...';
+  }
+  return firstSentence;
+}
+
 // ── API lookups ─────────────────────────────────────────────────────────
 
 interface WiktionaryDefinition {
@@ -241,6 +254,8 @@ async function lookupFreeDict(word: string, srcLang: SourceLanguage): Promise<{ 
 }
 
 async function translateMyMemory(word: string, srcCode: string, tgtCode: string): Promise<string | null> {
+  // Skip if source and target are the same language
+  if (srcCode === tgtCode) return null;
   try {
     const res = await fetch(
       `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=${srcCode}|${tgtCode}`,
@@ -249,7 +264,7 @@ async function translateMyMemory(word: string, srcCode: string, tgtCode: string)
     if (!res.ok) return null;
     const data = await res.json();
     const translated: string = data?.responseData?.translatedText;
-    if (!translated || translated.toLowerCase() === word.toLowerCase()) return null;
+    if (!translated) return null;
     // MyMemory sometimes returns ALL CAPS for short words — normalize
     if (translated === translated.toUpperCase() && translated.length > 1) {
       return translated.charAt(0).toUpperCase() + translated.slice(1).toLowerCase();
@@ -300,9 +315,17 @@ export async function lookupWord(
       }
     }
 
-    // Fallback: use first Wiktionary definition as translation
+    // Fallback: use first Wiktionary definition — but truncate and optionally translate
     if (!translation && definitions.length > 0) {
-      translation = definitions[0];
+      // Get a short, clean definition (first sentence, max ~80 chars)
+      const shortDef = truncateDefinition(definitions[0]);
+      // If target is not English, try translating this short definition
+      if (tgtLang !== 'en') {
+        const translated = await translateMyMemory(shortDef, 'en', tgtLang);
+        translation = translated || shortDef;
+      } else {
+        translation = shortDef;
+      }
     }
   }
 
@@ -311,7 +334,13 @@ export async function lookupWord(
     const fdResult = await lookupFreeDict(normalized, srcLang);
     if (fdResult) {
       grammar = { type: fdResult.wordType };
-      translation = fdResult.definition;
+      const shortDef = truncateDefinition(fdResult.definition);
+      if (tgtLang !== 'en') {
+        const translated = await translateMyMemory(shortDef, 'en', tgtLang);
+        translation = translated || shortDef;
+      } else {
+        translation = shortDef;
+      }
     }
   }
 
