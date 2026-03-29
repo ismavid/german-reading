@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type * as pdfjsLib from 'pdfjs-dist';
 import { extractWordsFromPage, type ExtractedWord } from '../services/pdfLoader';
 import { useLibraryStore } from '../store/libraryStore';
+import { usePdfStore } from '../store/pdfStore';
 import { WordTooltip } from './WordTooltip';
 
 interface Props {
@@ -17,6 +18,7 @@ export function PdfPage({ document, pageNumber, scale }: Props) {
   const [hoveredWord, setHoveredWord] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const hasWord = useLibraryStore((s) => s.hasWord);
+  const language = usePdfStore((s) => s.language);
   const renderTaskRef = useRef<ReturnType<pdfjsLib.PDFPageProxy['render']> | null>(null);
 
   useEffect(() => {
@@ -101,6 +103,7 @@ export function PdfPage({ document, pageNumber, scale }: Props) {
         word={hoveredWord}
         anchorEl={anchorEl}
         onClose={onCloseTooltip}
+        language={language}
       />
     </div>
   );

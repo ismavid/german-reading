@@ -1,3 +1,5 @@
+export type Language = 'de' | 'en';
+
 export type WordType =
   | 'Substantiv'
   | 'Verb'
@@ -22,6 +24,7 @@ export interface WordLookupResult {
   translation: string;
   grammar: GrammarInfo;
   definitions?: string[];
+  language?: Language;
 }
 
 export interface SavedWord {
@@ -30,6 +33,7 @@ export interface SavedWord {
   translation: string;
   grammar: GrammarInfo;
   savedAt: number;
+  language?: Language;
 }
 
 export interface WordPosition {
@@ -53,14 +57,32 @@ export const WORD_TYPE_COLORS: Record<WordType, string> = {
   Andere: 'var(--color-other)',
 };
 
-export const WORD_TYPE_LABELS: Record<WordType, string> = {
-  Substantiv: 'Substantiv',
-  Verb: 'Verb',
-  Adjektiv: 'Adjektiv',
-  Adverb: 'Adverb',
-  Präposition: 'Präposition',
-  Konjunktion: 'Konjunktion',
-  Pronomen: 'Pronomen',
-  Artikel: 'Artikel',
-  Andere: 'Andere',
+export const WORD_TYPE_LABELS: Record<Language, Record<WordType, string>> = {
+  de: {
+    Substantiv: 'Substantiv',
+    Verb: 'Verb',
+    Adjektiv: 'Adjektiv',
+    Adverb: 'Adverb',
+    Präposition: 'Präposition',
+    Konjunktion: 'Konjunktion',
+    Pronomen: 'Pronomen',
+    Artikel: 'Artikel',
+    Andere: 'Andere',
+  },
+  en: {
+    Substantiv: 'Noun',
+    Verb: 'Verb',
+    Adjektiv: 'Adjective',
+    Adverb: 'Adverb',
+    Präposition: 'Preposition',
+    Konjunktion: 'Conjunction',
+    Pronomen: 'Pronoun',
+    Artikel: 'Article',
+    Andere: 'Other',
+  },
+};
+
+export const LANGUAGE_LABELS: Record<Language, { name: string; flag: string; target: string }> = {
+  de: { name: 'German', flag: 'DE', target: 'English' },
+  en: { name: 'English', flag: 'EN', target: 'Spanish' },
 };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadPdfDocument } from '../services/pdfLoader';
+import { detectLanguage } from '../services/languageDetector';
 import { savePdf, getRecentPdfs, loadPdfData, removePdf, type PdfHistoryMeta } from '../services/pdfHistory';
 import { usePdfStore } from '../store/pdfStore';
 
@@ -9,6 +10,7 @@ export function PdfUploader() {
   const [loading, setLoading] = useState(false);
   const [recentPdfs, setRecentPdfs] = useState<PdfHistoryMeta[]>([]);
   const setDocument = usePdfStore((s) => s.setDocument);
+  const setLanguage = usePdfStore((s) => s.setLanguage);
 
   useEffect(() => {
     getRecentPdfs().then(setRecentPdfs).catch(() => {});
@@ -18,16 +20,20 @@ export function PdfUploader() {
     async (buffer: ArrayBuffer, fileName: string) => {
       setLoading(true);
       try {
+        // Clone the buffer before pdf.js consumes it (transfers/detaches the original)
+        const bufferCopy = buffer.slice(0);
         const doc = await loadPdfDocument(buffer);
-        await savePdf(fileName, buffer, doc.numPages);
+        const lang = await detectLanguage(doc);
+        await savePdf(fileName, bufferCopy, doc.numPages);
         setDocument(doc, fileName);
+        setLanguage(lang);
       } catch (e) {
         console.error('Failed to load PDF:', e);
       } finally {
         setLoading(false);
       }
     },
-    [setDocument]
+    [setDocument, setLanguage]
   );
 
   const handleFile = useCallback(
@@ -117,7 +123,7 @@ export function PdfUploader() {
             </div>
           ) : (
             <div className="text-center">
-              <p className="text-lg font-semibold text-slate-800">Drop a German PDF here</p>
+              <p className="text-lg font-semibold text-slate-800">Drop a PDF here</p>
               <p className="text-sm text-slate-500 mt-1">or click to browse files</p>
             </div>
           )}

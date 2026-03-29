@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useLibraryStore } from '../store/libraryStore';
+import { usePdfStore } from '../store/pdfStore';
 import { exportToAnki } from '../services/ankiExporter';
 import type { WordType } from '../types/word';
 import { WORD_TYPE_COLORS, WORD_TYPE_LABELS } from '../types/word';
@@ -13,6 +14,8 @@ export function WordLibrary() {
   const words = useLibraryStore((s) => s.words);
   const removeWord = useLibraryStore((s) => s.removeWord);
   const clearAll = useLibraryStore((s) => s.clear);
+  const language = usePdfStore((s) => s.language);
+  const labels = WORD_TYPE_LABELS[language];
   const [activeFilter, setActiveFilter] = useState<WordType | 'all'>('all');
 
   const grouped = useMemo(() => {
@@ -74,7 +77,7 @@ export function WordLibrary() {
                     : undefined
                 }
               >
-                {WORD_TYPE_LABELS[type]} ({count})
+                {labels[type]} ({count})
               </button>
             );
           })}

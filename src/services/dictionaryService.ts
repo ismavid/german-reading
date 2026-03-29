@@ -1,4 +1,4 @@
-import type { WordLookupResult, WordType, GrammarInfo } from '../types/word';
+import type { WordLookupResult, WordType, GrammarInfo, Language } from '../types/word';
 
 const cache = new Map<string, WordLookupResult>();
 
@@ -36,7 +36,9 @@ function mapPOS(pos: string): WordType {
   return 'Andere';
 }
 
-function guessTypeByMorphology(word: string): WordType {
+// --- German morphology guesser ---
+
+function guessTypeByMorphologyDE(word: string): WordType {
   const w = word.toLowerCase();
   if (/^(der|die|das|ein|eine|einem|einen|eines|einer)$/.test(w)) return 'Artikel';
   if (/^(ich|du|er|sie|es|wir|ihr|mich|mir|dich|dir|sich|uns|euch|ihnen)$/.test(w)) return 'Pronomen';
@@ -52,13 +54,31 @@ function guessTypeByMorphology(word: string): WordType {
   return 'Andere';
 }
 
+// --- English morphology guesser ---
+
+function guessTypeByMorphologyEN(word: string): WordType {
+  const w = word.toLowerCase();
+  if (/^(a|an|the)$/.test(w)) return 'Artikel';
+  if (/^(i|you|he|she|it|we|they|me|him|her|us|them|my|your|his|its|our|their|mine|yours|ours|theirs|myself|yourself|himself|herself|itself|ourselves|themselves)$/.test(w)) return 'Pronomen';
+  if (/^(and|or|but|nor|for|yet|so|because|although|though|while|whereas|unless|until|since|if|when|after|before|that|which|who|whom)$/.test(w)) return 'Konjunktion';
+  if (/^(in|on|at|to|for|with|from|by|about|into|through|during|before|after|above|below|between|under|over|against|without|among|within|along|across|behind|beyond|toward|towards|upon|onto|beside|besides|except|until|since|of|off|out|up|down)$/.test(w)) return 'Präposition';
+  if (/(ly)$/.test(w) && w.length > 3) return 'Adverb';
+  if (/^(very|also|already|always|never|often|sometimes|here|there|now|then|today|yesterday|tomorrow|quite|rather|almost|just|still|even|too|enough)$/.test(w)) return 'Adverb';
+  if (/(tion|sion|ment|ness|ity|ance|ence|er|or|ist|ism|ship|dom|hood)$/.test(w) && w.length > 4) return 'Substantiv';
+  if (/(ful|less|ous|ive|able|ible|al|ial|ical|ish|like|ly|ant|ent|ary|ory)$/.test(w) && w.length > 4) return 'Adjektiv';
+  if (/(ing|ed|ize|ise|ify|ate|en)$/.test(w) && w.length > 3) return 'Verb';
+  return 'Andere';
+}
+
+// --- German lookups ---
+
 interface WiktionaryDefinition {
   partOfSpeech: string;
   language: string;
   definitions: Array<{ definition: string; parsedExamples?: Array<{ example: string }> }>;
 }
 
-async function lookupWiktionary(word: string): Promise<WordLookupResult | null> {
+async function lookupWiktionaryDE(word: string): Promise<WordLookupResult | null> {
   try {
     const res = await fetch(
       `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`,
@@ -75,11 +95,9 @@ async function lookupWiktionary(word: string): Promise<WordLookupResult | null> 
 
     const grammar: GrammarInfo = { type: wordType };
 
-    // Parse definitions for grammar clues
     const allDefs = german.flatMap((e) => e.definitions.map((d) => d.definition));
     const defsText = allDefs.join(' ');
 
-    // Extract gender for nouns
     if (wordType === 'Substantiv') {
       const genderMatch = defsText.match(/\b(masculine|feminine|neuter)\b/i) ||
                           defsText.match(/\b(der|die|das)\b/);
@@ -89,13 +107,11 @@ async function lookupWiktionary(word: string): Promise<WordLookupResult | null> 
         else if (g === 'feminine' || g === 'die') grammar.gender = 'die';
         else if (g === 'neuter' || g === 'das') grammar.gender = 'das';
       }
-      // Extract plural
       const pluralMatch = defsText.match(/plural[:\s]+(?:of\s+)?(\S+)/i) ||
                           defsText.match(/plural\s*(?:<[^>]*>)*\s*(\w+)/i);
       if (pluralMatch) grammar.plural = pluralMatch[1];
     }
 
-    // Extract Partizip II for verbs
     if (wordType === 'Verb') {
       const partizipMatch = defsText.match(/past participle[:\s]+(?:of\s+)?(\S+)/i) ||
                             defsText.match(/partizip\s*II[:\s]+(\S+)/i);
@@ -105,11 +121,10 @@ async function lookupWiktionary(word: string): Promise<WordLookupResult | null> 
       if (auxMatch) grammar.auxiliary = auxMatch[1].toLowerCase() as 'haben' | 'sein';
     }
 
-    // Strip HTML from first definition for translation
     const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
     const translation = allDefs.length > 0 ? stripHtml(allDefs[0]) : word;
 
-    return { word, translation, grammar, definitions: allDefs.map(stripHtml) };
+    return { word, translation, grammar, definitions: allDefs.map(stripHtml), language: 'de' };
   } catch {
     return null;
   }
@@ -122,7 +137,7 @@ interface FreeDictEntry {
   }>;
 }
 
-async function lookupFreeDict(word: string): Promise<WordLookupResult | null> {
+async function lookupFreeDictDE(word: string): Promise<WordLookupResult | null> {
   try {
     const res = await fetch(
       `https://api.dictionaryapi.dev/api/v2/entries/de/${encodeURIComponent(word)}`,
@@ -138,16 +153,16 @@ async function lookupFreeDict(word: string): Promise<WordLookupResult | null> {
     const grammar: GrammarInfo = { type: wordType };
     const translation = meaning.definitions[0]?.definition || word;
 
-    return { word, translation, grammar };
+    return { word, translation, grammar, language: 'de' };
   } catch {
     return null;
   }
 }
 
-async function lookupMyMemory(word: string): Promise<string | null> {
+async function lookupMyMemory(word: string, langPair: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=de|en`,
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=${langPair}`,
       { signal: AbortSignal.timeout(4000) }
     );
     if (!res.ok) return null;
@@ -160,44 +175,139 @@ async function lookupMyMemory(word: string): Promise<string | null> {
   }
 }
 
-export async function lookupWord(word: string): Promise<WordLookupResult | null> {
-  const normalized = word.trim();
-  if (!normalized || normalized.length < 1) return null;
+// --- English lookups (English → Spanish) ---
 
-  // Check cache
-  const cacheKey = normalized.toLowerCase();
-  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
+async function lookupWiktionaryEN(word: string): Promise<WordLookupResult | null> {
+  try {
+    const res = await fetch(
+      `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
 
-  // Try Wiktionary first
-  let result = await lookupWiktionary(normalized);
+    const data: Record<string, WiktionaryDefinition[]> = await res.json();
+    const english = data['en'];
+    if (!english || english.length === 0) return null;
 
-  // Try free dictionary as fallback
-  if (!result) {
-    result = await lookupFreeDict(normalized);
+    const entry = english[0];
+    const wordType = mapPOS(entry.partOfSpeech);
+    const grammar: GrammarInfo = { type: wordType };
+
+    const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
+    const allDefs = english.flatMap((e) => e.definitions.map((d) => stripHtml(d.definition)));
+
+    // Get Spanish translation via MyMemory
+    const spanishTranslation = await lookupMyMemory(word, 'en|es');
+    const translation = spanishTranslation || (allDefs.length > 0 ? allDefs[0] : word);
+
+    return { word, translation, grammar, definitions: allDefs, language: 'en' };
+  } catch {
+    return null;
   }
+}
 
-  // If still nothing, use MyMemory for translation + heuristics for type
+async function lookupFreeDictEN(word: string): Promise<WordLookupResult | null> {
+  try {
+    const res = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
+
+    const data: FreeDictEntry[] = await res.json();
+    if (!data.length || !data[0].meanings.length) return null;
+
+    const meaning = data[0].meanings[0];
+    const wordType = mapPOS(meaning.partOfSpeech);
+    const grammar: GrammarInfo = { type: wordType };
+
+    // Get Spanish translation
+    const spanishTranslation = await lookupMyMemory(word, 'en|es');
+    const translation = spanishTranslation || meaning.definitions[0]?.definition || word;
+
+    return { word, translation, grammar, language: 'en' };
+  } catch {
+    return null;
+  }
+}
+
+// --- Main lookup function ---
+
+async function lookupGerman(word: string): Promise<WordLookupResult | null> {
+  const normalized = word.trim();
+
+  let result = await lookupWiktionaryDE(normalized);
+  if (!result) result = await lookupFreeDictDE(normalized);
+
   if (!result) {
-    const translation = await lookupMyMemory(normalized);
+    const translation = await lookupMyMemory(normalized, 'de|en');
     if (translation) {
       result = {
         word: normalized,
         translation,
-        grammar: { type: guessTypeByMorphology(normalized) },
+        grammar: { type: guessTypeByMorphologyDE(normalized) },
+        language: 'de',
       };
     }
   }
 
-  // Last resort: heuristic only
   if (!result) {
     result = {
       word: normalized,
       translation: '(translation unavailable)',
-      grammar: { type: guessTypeByMorphology(normalized) },
+      grammar: { type: guessTypeByMorphologyDE(normalized) },
+      language: 'de',
     };
   }
 
-  cache.set(cacheKey, result);
-  saveCache();
+  return result;
+}
+
+async function lookupEnglish(word: string): Promise<WordLookupResult | null> {
+  const normalized = word.trim();
+
+  let result = await lookupWiktionaryEN(normalized);
+  if (!result) result = await lookupFreeDictEN(normalized);
+
+  if (!result) {
+    const translation = await lookupMyMemory(normalized, 'en|es');
+    if (translation) {
+      result = {
+        word: normalized,
+        translation,
+        grammar: { type: guessTypeByMorphologyEN(normalized) },
+        language: 'en',
+      };
+    }
+  }
+
+  if (!result) {
+    result = {
+      word: normalized,
+      translation: '(traducción no disponible)',
+      grammar: { type: guessTypeByMorphologyEN(normalized) },
+      language: 'en',
+    };
+  }
+
+  return result;
+}
+
+export async function lookupWord(word: string, language: Language = 'de'): Promise<WordLookupResult | null> {
+  const normalized = word.trim();
+  if (!normalized || normalized.length < 1) return null;
+
+  const cacheKey = `${language}:${normalized.toLowerCase()}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
+
+  const result = language === 'en'
+    ? await lookupEnglish(normalized)
+    : await lookupGerman(normalized);
+
+  if (result) {
+    cache.set(cacheKey, result);
+    saveCache();
+  }
+
   return result;
 }

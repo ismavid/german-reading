@@ -6,7 +6,7 @@ import {
   autoUpdate,
 } from '@floating-ui/react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { WordLookupResult } from '../types/word';
+import type { WordLookupResult, Language } from '../types/word';
 import { WORD_TYPE_COLORS } from '../types/word';
 import { lookupWord } from '../services/dictionaryService';
 import { useLibraryStore } from '../store/libraryStore';
@@ -15,22 +15,25 @@ interface Props {
   word: string | null;
   anchorEl: HTMLElement | null;
   onClose: () => void;
+  language: Language;
 }
 
-function formatGermanSide(r: WordLookupResult): string {
+function formatSourceSide(r: WordLookupResult): string {
   const { word, grammar } = r;
-  if (grammar.type === 'Substantiv' && grammar.gender) {
-    const plural = grammar.plural ? ` (${grammar.plural})` : '';
-    return `${grammar.gender} ${word}${plural}`;
-  }
-  if (grammar.type === 'Verb' && grammar.partizipII) {
-    const aux = grammar.auxiliary === 'sein' ? 'sein ' : '';
-    return `${word} (${aux}${grammar.partizipII})`;
+  if (r.language === 'de' || !r.language) {
+    if (grammar.type === 'Substantiv' && grammar.gender) {
+      const plural = grammar.plural ? ` (${grammar.plural})` : '';
+      return `${grammar.gender} ${word}${plural}`;
+    }
+    if (grammar.type === 'Verb' && grammar.partizipII) {
+      const aux = grammar.auxiliary === 'sein' ? 'sein ' : '';
+      return `${word} (${aux}${grammar.partizipII})`;
+    }
   }
   return word;
 }
 
-export function WordTooltip({ word, anchorEl, onClose }: Props) {
+export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
   const [result, setResult] = useState<WordLookupResult | null>(null);
   const [loading, setLoading] = useState(false);
   const isOverTooltip = useRef(false);
@@ -56,14 +59,14 @@ export function WordTooltip({ word, anchorEl, onClose }: Props) {
     }
     setLoading(true);
     let cancelled = false;
-    lookupWord(word).then((r) => {
+    lookupWord(word, language).then((r) => {
       if (!cancelled) {
         setResult(r);
         setLoading(false);
       }
     });
     return () => { cancelled = true; };
-  }, [word]);
+  }, [word, language]);
 
   // Unified close logic: only close when NEITHER anchor nor tooltip is hovered
   const scheduleClose = useCallback(() => {
@@ -135,7 +138,7 @@ export function WordTooltip({ word, anchorEl, onClose }: Props) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-slate-900 text-sm leading-tight">
-                  {formatGermanSide(result)}
+                  {formatSourceSide(result)}
                 </span>
                 <span
                   className="text-[9px] font-semibold px-1 py-px rounded text-white shrink-0 uppercase tracking-wide"
