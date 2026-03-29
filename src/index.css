@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+
+  --color-noun: #8b5cf6;
+  --color-verb: #10b981;
+  --color-adjective: #f59e0b;
+  --color-adverb: #ec4899;
+  --color-preposition: #06b6d4;
+  --color-conjunction: #6366f1;
+  --color-pronoun: #f97316;
+  --color-article: #64748b;
+  --color-other: #78716c;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+.word-span {
+  position: absolute;
+  color: transparent;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+  z-index: 2;
+}
+
+.word-span:hover {
+  background-color: rgba(59, 130, 246, 0.18);
+}
+
+.word-span.saved {
+  background-color: rgba(139, 92, 246, 0.12);
+}
+
+.word-span.saved:hover {
+  background-color: rgba(139, 92, 246, 0.25);
+}
+
+.tooltip-enter {
+  animation: tooltipIn 0.15s ease-out;
+}
+
+@keyframes tooltipIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.pdf-page-container {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+  border-radius: 4px;
+  overflow: hidden;
+}
