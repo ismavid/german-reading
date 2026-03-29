@@ -14,8 +14,8 @@ export function WordLibrary() {
   const words = useLibraryStore((s) => s.words);
   const removeWord = useLibraryStore((s) => s.removeWord);
   const clearAll = useLibraryStore((s) => s.clear);
-  const language = usePdfStore((s) => s.language);
-  const labels = WORD_TYPE_LABELS[language];
+  const targetLanguage = usePdfStore((s) => s.targetLanguage);
+  const labels = WORD_TYPE_LABELS[targetLanguage];
   const [activeFilter, setActiveFilter] = useState<WordType | 'all'>('all');
 
   const grouped = useMemo(() => {

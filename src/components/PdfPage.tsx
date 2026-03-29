@@ -18,7 +18,8 @@ export function PdfPage({ document, pageNumber, scale }: Props) {
   const [hoveredWord, setHoveredWord] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const hasWord = useLibraryStore((s) => s.hasWord);
-  const language = usePdfStore((s) => s.language);
+  const sourceLanguage = usePdfStore((s) => s.sourceLanguage);
+  const targetLanguage = usePdfStore((s) => s.targetLanguage);
   const renderTaskRef = useRef<ReturnType<pdfjsLib.PDFPageProxy['render']> | null>(null);
 
   useEffect(() => {
@@ -40,7 +41,6 @@ export function PdfPage({ document, pageNumber, scale }: Props) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Cancel any pending render
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
       }
@@ -81,7 +81,6 @@ export function PdfPage({ document, pageNumber, scale }: Props) {
     >
       <canvas ref={canvasRef} className="block" />
 
-      {/* Word overlay layer */}
       <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
         {words.map((w, i) => (
           <span
@@ -103,7 +102,8 @@ export function PdfPage({ document, pageNumber, scale }: Props) {
         word={hoveredWord}
         anchorEl={anchorEl}
         onClose={onCloseTooltip}
-        language={language}
+        sourceLanguage={sourceLanguage}
+        targetLanguage={targetLanguage}
       />
     </div>
   );

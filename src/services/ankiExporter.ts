@@ -1,22 +1,21 @@
 import type { SavedWord } from '../types/word';
+import { SUPPORTED_LANGUAGES } from '../types/word';
 
 function formatFront(w: SavedWord): string {
-  const { word, grammar } = w;
+  const { word, grammar, sourceLanguage } = w;
 
   // German-specific formatting
-  if (!w.language || w.language === 'de') {
+  if (sourceLanguage === 'de') {
     if (grammar.type === 'Substantiv') {
       const article = grammar.gender || '';
       const plural = grammar.plural ? ` (${grammar.plural})` : '';
       return article ? `${article} ${word}${plural}` : `${word}${plural}`;
     }
-
     if (grammar.type === 'Verb') {
       if (grammar.partizipII) {
         const aux = grammar.auxiliary === 'sein' ? 'sein ' : '';
         return `${word} (${aux}${grammar.partizipII})`;
       }
-      return word;
     }
   }
 
@@ -31,9 +30,11 @@ export function exportToAnki(words: SavedWord[]): void {
   for (const w of words) {
     const front = formatFront(w);
     const back = w.translation;
-    const langTag = w.language === 'en' ? 'english-reading' : 'german-reading';
+    const langName = w.sourceLanguage
+      ? SUPPORTED_LANGUAGES[w.sourceLanguage]?.name.toLowerCase() || w.sourceLanguage
+      : 'unknown';
     const tag = w.grammar.type.toLowerCase().replace(/ä/g, 'ae').replace(/ü/g, 'ue').replace(/ö/g, 'oe');
-    lines.push(`${front}\t${back}\t${tag} ${langTag}`);
+    lines.push(`${front}\t${back}\t${tag} ${langName}-reading`);
   }
 
   const content = lines.join('\n');

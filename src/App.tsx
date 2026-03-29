@@ -1,17 +1,27 @@
 import { useState } from 'react';
 import { usePdfStore } from './store/pdfStore';
 import { useLibraryStore } from './store/libraryStore';
-import { LANGUAGE_LABELS } from './types/word';
+import { SUPPORTED_LANGUAGES, TARGET_LABELS } from './types/word';
+import type { TargetLanguage } from './types/word';
 import { PdfUploader } from './components/PdfUploader';
 import { PdfViewer } from './components/PdfViewer';
 import { WordLibrary } from './components/WordLibrary';
 
 export default function App() {
   const hasDocument = usePdfStore((s) => !!s.document);
-  const language = usePdfStore((s) => s.language);
+  const sourceLanguage = usePdfStore((s) => s.sourceLanguage);
+  const targetLanguage = usePdfStore((s) => s.targetLanguage);
+  const setTargetLanguage = usePdfStore((s) => s.setTargetLanguage);
   const wordCount = useLibraryStore((s) => s.words.length);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const langInfo = LANGUAGE_LABELS[language];
+
+  const srcInfo = SUPPORTED_LANGUAGES[sourceLanguage];
+  const tgtInfo = TARGET_LABELS[targetLanguage];
+
+  const toggleTarget = () => {
+    const next: TargetLanguage = targetLanguage === 'en' ? 'es' : 'en';
+    setTargetLanguage(next);
+  };
 
   return (
     <div className="h-full flex">
@@ -30,9 +40,17 @@ export default function App() {
 
           {hasDocument && (
             <div className="flex items-center gap-3">
-              <span className="text-[11px] font-medium px-2 py-1 rounded-full bg-slate-100 text-slate-500">
-                {langInfo.flag} → {langInfo.target}
-              </span>
+              {/* Language badge — click to toggle target */}
+              <button
+                onClick={toggleTarget}
+                className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                title="Click to toggle target language"
+              >
+                <span>{srcInfo.flag} {srcInfo.name}</span>
+                <span className="text-slate-400">→</span>
+                <span>{tgtInfo.flag} {tgtInfo.name}</span>
+              </button>
+
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors ${

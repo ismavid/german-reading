@@ -25,6 +25,7 @@ export const useLibraryStore = create<LibraryState>()(
           translation: result.translation,
           grammar: result.grammar,
           savedAt: Date.now(),
+          sourceLanguage: result.sourceLanguage,
         };
         set((s) => ({ words: [...s.words, saved] }));
       },

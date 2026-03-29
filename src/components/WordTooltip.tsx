@@ -6,7 +6,7 @@ import {
   autoUpdate,
 } from '@floating-ui/react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { WordLookupResult, Language } from '../types/word';
+import type { WordLookupResult, SourceLanguage, TargetLanguage } from '../types/word';
 import { WORD_TYPE_COLORS } from '../types/word';
 import { lookupWord } from '../services/dictionaryService';
 import { useLibraryStore } from '../store/libraryStore';
@@ -15,12 +15,14 @@ interface Props {
   word: string | null;
   anchorEl: HTMLElement | null;
   onClose: () => void;
-  language: Language;
+  sourceLanguage: SourceLanguage;
+  targetLanguage: TargetLanguage;
 }
 
 function formatSourceSide(r: WordLookupResult): string {
-  const { word, grammar } = r;
-  if (r.language === 'de' || !r.language) {
+  const { word, grammar, sourceLanguage } = r;
+  // German-specific formatting
+  if (sourceLanguage === 'de') {
     if (grammar.type === 'Substantiv' && grammar.gender) {
       const plural = grammar.plural ? ` (${grammar.plural})` : '';
       return `${grammar.gender} ${word}${plural}`;
@@ -33,7 +35,7 @@ function formatSourceSide(r: WordLookupResult): string {
   return word;
 }
 
-export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
+export function WordTooltip({ word, anchorEl, onClose, sourceLanguage, targetLanguage }: Props) {
   const [result, setResult] = useState<WordLookupResult | null>(null);
   const [loading, setLoading] = useState(false);
   const isOverTooltip = useRef(false);
@@ -59,16 +61,15 @@ export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
     }
     setLoading(true);
     let cancelled = false;
-    lookupWord(word, language).then((r) => {
+    lookupWord(word, sourceLanguage, targetLanguage).then((r) => {
       if (!cancelled) {
         setResult(r);
         setLoading(false);
       }
     });
     return () => { cancelled = true; };
-  }, [word, language]);
+  }, [word, sourceLanguage, targetLanguage]);
 
-  // Unified close logic: only close when NEITHER anchor nor tooltip is hovered
   const scheduleClose = useCallback(() => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => {
@@ -78,7 +79,6 @@ export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
     }, 400);
   }, [onClose]);
 
-  // Listen for anchor mouseleave
   useEffect(() => {
     if (!anchorEl) return;
     isOverAnchor.current = true;
@@ -100,7 +100,6 @@ export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
     };
   }, [anchorEl, scheduleClose]);
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => { if (closeTimer.current) clearTimeout(closeTimer.current); };
   }, []);
@@ -124,10 +123,9 @@ export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
         scheduleClose();
       }}
     >
-      {/* Invisible bridge: extends the tooltip's hover area downward to cover the gap */}
       <div className="absolute left-0 right-0 -bottom-3 h-3" />
 
-      <div className="bg-white rounded-lg shadow-lg shadow-black/8 border border-slate-100 px-3 py-2 max-w-[260px]">
+      <div className="bg-white rounded-lg shadow-lg shadow-black/8 border border-slate-100 px-3 py-2 max-w-[280px]">
         {loading ? (
           <div className="flex items-center gap-2 text-slate-400 text-xs">
             <div className="w-3 h-3 border-2 border-slate-200 border-t-primary-500 rounded-full animate-spin" />
@@ -147,7 +145,7 @@ export function WordTooltip({ word, anchorEl, onClose, language }: Props) {
                   {result.grammar.type.slice(0, 3)}
                 </span>
               </div>
-              <p className="text-xs text-slate-600 mt-0.5 leading-snug truncate">
+              <p className="text-xs text-slate-600 mt-0.5 leading-snug">
                 {result.translation}
               </p>
             </div>

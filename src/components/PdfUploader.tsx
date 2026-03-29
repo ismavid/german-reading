@@ -10,7 +10,7 @@ export function PdfUploader() {
   const [loading, setLoading] = useState(false);
   const [recentPdfs, setRecentPdfs] = useState<PdfHistoryMeta[]>([]);
   const setDocument = usePdfStore((s) => s.setDocument);
-  const setLanguage = usePdfStore((s) => s.setLanguage);
+  const setSourceLanguage = usePdfStore((s) => s.setSourceLanguage);
 
   useEffect(() => {
     getRecentPdfs().then(setRecentPdfs).catch(() => {});
@@ -26,14 +26,14 @@ export function PdfUploader() {
         const lang = await detectLanguage(doc);
         await savePdf(fileName, bufferCopy, doc.numPages);
         setDocument(doc, fileName);
-        setLanguage(lang);
+        setSourceLanguage(lang);
       } catch (e) {
         console.error('Failed to load PDF:', e);
       } finally {
         setLoading(false);
       }
     },
-    [setDocument, setLanguage]
+    [setDocument, setSourceLanguage]
   );
 
   const handleFile = useCallback(
