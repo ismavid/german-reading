@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import type { ExtractedWord } from '../types/word';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -10,13 +11,7 @@ export async function loadPdfDocument(data: ArrayBuffer): Promise<pdfjsLib.PDFDo
   return loadingTask.promise;
 }
 
-export interface ExtractedWord {
-  word: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export type { ExtractedWord } from '../types/word';
 
 // Offscreen canvas for measuring text widths accurately
 const measureCanvas = document.createElement('canvas');
@@ -27,12 +22,18 @@ function measureTextWidth(text: string, font: string): number {
   return measureCtx.measureText(text).width;
 }
 
+/**
+ * Read hoverable words from a page's text layer.
+ *
+ * Coordinates come back in unscaled PDF units — see `ExtractedWord`. The
+ * renderer applies the zoom, which keeps this result valid across zoom changes
+ * and matches what the OCR path produces.
+ */
 export async function extractWordsFromPage(
-  page: pdfjsLib.PDFPageProxy,
-  scale: number
+  page: pdfjsLib.PDFPageProxy
 ): Promise<ExtractedWord[]> {
   const textContent = await page.getTextContent();
-  const viewport = page.getViewport({ scale });
+  const viewport = page.getViewport({ scale: 1 });
   const words: ExtractedWord[] = [];
 
   // Build a font name map from the page's common objs
@@ -85,8 +86,7 @@ export async function extractWordsFromPage(
 
       // Scale factor: PDF.js item.width (scaled) vs measured full string width
       const measuredFullWidth = measureTextWidth(fullStr, cssFont);
-      const actualItemWidth = item.width * scale;
-      const widthRatio = measuredFullWidth > 0 ? actualItemWidth / measuredFullWidth : 1;
+      const widthRatio = measuredFullWidth > 0 ? item.width / measuredFullWidth : 1;
 
       const wordX = baselineX + prefixWidth * widthRatio;
       const wordWidth = tokenWidth * widthRatio;
@@ -95,7 +95,7 @@ export async function extractWordsFromPage(
         word: cleanWord,
         x: wordX,
         y: topY,
-        width: Math.max(wordWidth, 6),
+        width: Math.max(wordWidth, 4),
         height: lineHeight,
       });
 

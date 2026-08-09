@@ -1,111 +1,122 @@
+import { PDF_STORE, isQuotaError, toPromise, withStore } from './db';
+
+/**
+ * Largest PDF whose bytes we keep in IndexedDB.
+ *
+ * A scanned coursebook can run to hundreds of megabytes. Storing one costs a
+ * long freeze while the buffer is cloned and risks blowing the origin's quota,
+ * so past this size we remember the document but not its contents: it stays in
+ * the recent list and its OCR cache survives, and reopening asks for the file
+ * again. That is a far better trade than a browser that can't store anything.
+ */
+export const MAX_STORED_BYTES = 75 * 1024 * 1024;
+
+const MAX_ENTRIES = 10;
+
 export interface PdfHistoryEntry {
   id: string;
   fileName: string;
-  data: ArrayBuffer;
+  /** Absent when the file was too large to keep — see MAX_STORED_BYTES. */
+  data?: ArrayBuffer;
+  fileSize: number;
   lastOpened: number;
   pageCount: number;
-}
-
-const DB_NAME = 'lesehelfer';
-const STORE_NAME = 'pdfs';
-const MAX_ENTRIES = 10;
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        store.createIndex('lastOpened', 'lastOpened');
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function tx(db: IDBDatabase, mode: IDBTransactionMode): IDBObjectStore {
-  return db.transaction(STORE_NAME, mode).objectStore(STORE_NAME);
-}
-
-export async function savePdf(fileName: string, data: ArrayBuffer, pageCount: number): Promise<void> {
-  const db = await openDB();
-  const id = fileName; // use filename as unique key (overwrite if same name)
-  const entry: PdfHistoryEntry = { id, fileName, data, lastOpened: Date.now(), pageCount };
-
-  await new Promise<void>((resolve, reject) => {
-    const req = tx(db, 'readwrite').put(entry);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-
-  // Prune old entries beyond MAX_ENTRIES
-  const all = await getRecentPdfs();
-  if (all.length > MAX_ENTRIES) {
-    const toRemove = all.slice(MAX_ENTRIES);
-    const store = tx(db, 'readwrite');
-    for (const e of toRemove) {
-      store.delete(e.id);
-    }
-  }
-
-  db.close();
 }
 
 export interface PdfHistoryMeta {
   id: string;
   fileName: string;
+  fileSize: number;
   lastOpened: number;
   pageCount: number;
+  /** False when only metadata was stored and the file must be re-picked from disk. */
+  hasData: boolean;
+}
+
+export async function savePdf(
+  fileName: string,
+  data: ArrayBuffer,
+  pageCount: number,
+): Promise<void> {
+  const fileSize = data.byteLength;
+  const base: PdfHistoryEntry = {
+    id: fileName,
+    fileName,
+    fileSize,
+    lastOpened: Date.now(),
+    pageCount,
+  };
+
+  const entry: PdfHistoryEntry =
+    fileSize <= MAX_STORED_BYTES ? { ...base, data } : base;
+
+  try {
+    await put(entry);
+  } catch (err) {
+    if (!isQuotaError(err)) return;
+    // Make room and try once more; if the bytes still don't fit, keep the
+    // metadata so the document at least stays in the recent list.
+    await pruneTo(Math.floor(MAX_ENTRIES / 2));
+    try {
+      await put(entry);
+    } catch {
+      try { await put(base); } catch { /* history is a convenience, not a requirement */ }
+    }
+  }
+
+  await pruneTo(MAX_ENTRIES);
+}
+
+function put(entry: PdfHistoryEntry): Promise<IDBValidKey> {
+  return withStore(PDF_STORE, 'readwrite', (store) => toPromise(store.put(entry)));
 }
 
 export async function getRecentPdfs(): Promise<PdfHistoryMeta[]> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const store = tx(db, 'readonly');
-    const req = store.index('lastOpened').openCursor(null, 'prev');
-    const results: PdfHistoryMeta[] = [];
+  try {
+    const entries = await withStore(PDF_STORE, 'readonly', (store) =>
+      toPromise<PdfHistoryEntry[]>(store.getAll()),
+    );
 
-    req.onsuccess = () => {
-      const cursor = req.result;
-      if (cursor && results.length < MAX_ENTRIES) {
-        const val = cursor.value as PdfHistoryEntry;
-        results.push({
-          id: val.id,
-          fileName: val.fileName,
-          lastOpened: val.lastOpened,
-          pageCount: val.pageCount,
-        });
-        cursor.continue();
-      } else {
-        db.close();
-        resolve(results);
-      }
-    };
-    req.onerror = () => { db.close(); reject(req.error); };
-  });
+    return entries
+      .sort((a, b) => b.lastOpened - a.lastOpened)
+      .slice(0, MAX_ENTRIES)
+      .map((entry) => ({
+        id: entry.id,
+        fileName: entry.fileName,
+        fileSize: entry.fileSize ?? 0,
+        lastOpened: entry.lastOpened,
+        pageCount: entry.pageCount,
+        hasData: !!entry.data,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 export async function loadPdfData(id: string): Promise<ArrayBuffer | null> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const req = tx(db, 'readonly').get(id);
-    req.onsuccess = () => {
-      db.close();
-      const entry = req.result as PdfHistoryEntry | undefined;
-      resolve(entry?.data ?? null);
-    };
-    req.onerror = () => { db.close(); reject(req.error); };
-  });
+  try {
+    const entry = await withStore(PDF_STORE, 'readonly', (store) =>
+      toPromise<PdfHistoryEntry | undefined>(store.get(id)),
+    );
+    return entry?.data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function removePdf(id: string): Promise<void> {
-  const db = await openDB();
-  await new Promise<void>((resolve, reject) => {
-    const req = tx(db, 'readwrite').delete(id);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
+  try {
+    await withStore(PDF_STORE, 'readwrite', (store) => toPromise(store.delete(id)));
+  } catch { /* ignore */ }
+}
+
+/** Drop the least recently opened entries beyond `keep`. */
+async function pruneTo(keep: number): Promise<void> {
+  try {
+    await withStore(PDF_STORE, 'readwrite', async (store) => {
+      const entries = await toPromise<PdfHistoryEntry[]>(store.getAll());
+      entries.sort((a, b) => b.lastOpened - a.lastOpened);
+      for (const entry of entries.slice(keep)) store.delete(entry.id);
+    });
+  } catch { /* ignore */ }
 }

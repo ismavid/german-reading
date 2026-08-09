@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadPdfDocument } from '../services/pdfLoader';
-import { detectLanguage } from '../services/languageDetector';
+import { detectLanguage, detectLanguageFromText } from '../services/languageDetector';
+import { detectScannedDocument } from '../services/scanDetector';
+import { makeDocId } from '../services/ocr/ocrCache';
+import { recognizeTextForDetection } from '../services/ocr/ocrService';
 import { savePdf, getRecentPdfs, loadPdfData, removePdf, type PdfHistoryMeta } from '../services/pdfHistory';
 import { usePdfStore } from '../store/pdfStore';
+import type { SourceLanguage } from '../types/word';
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
 
 export function PdfUploader() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [recentPdfs, setRecentPdfs] = useState<PdfHistoryMeta[]>([]);
   const setDocument = usePdfStore((s) => s.setDocument);
-  const setSourceLanguage = usePdfStore((s) => s.setSourceLanguage);
+
+  const loading = status !== null;
 
   useEffect(() => {
     getRecentPdfs().then(setRecentPdfs).catch(() => {});
@@ -18,22 +29,47 @@ export function PdfUploader() {
 
   const openPdfBuffer = useCallback(
     async (buffer: ArrayBuffer, fileName: string) => {
-      setLoading(true);
+      setStatus('Opening PDF…');
+      setError(null);
       try {
         // Clone the buffer before pdf.js consumes it (transfers/detaches the original)
         const bufferCopy = buffer.slice(0);
+        const fileSize = bufferCopy.byteLength;
         const doc = await loadPdfDocument(buffer);
-        const lang = await detectLanguage(doc);
+        const docId = makeDocId(fileName, fileSize, doc.numPages);
+
+        const isScanned = await detectScannedDocument(doc);
+
+        let lang: SourceLanguage;
+        if (isScanned) {
+          // No text layer means the usual detector has nothing to read, so one
+          // page goes through OCR first purely to identify the language. A page
+          // from the middle of the book is far more representative than a cover.
+          setStatus('Scanned book — working out the language…');
+          try {
+            const samplePage = await doc.getPage(Math.max(1, Math.ceil(doc.numPages / 2)));
+            const text = await recognizeTextForDetection(samplePage);
+            lang = detectLanguageFromText(text);
+          } catch {
+            // Never let a failed guess block the book from opening — this app is
+            // for German by default, and the header has a picker to correct it.
+            lang = 'de';
+          }
+        } else {
+          lang = await detectLanguage(doc);
+        }
+
+        setStatus('Almost there…');
         await savePdf(fileName, bufferCopy, doc.numPages);
-        setDocument(doc, fileName);
-        setSourceLanguage(lang);
+        setDocument(doc, fileName, { docId, isScanned, sourceLanguage: lang });
       } catch (e) {
         console.error('Failed to load PDF:', e);
+        setError(e instanceof Error ? e.message : 'Could not open this PDF');
       } finally {
-        setLoading(false);
+        setStatus(null);
       }
     },
-    [setDocument, setSourceLanguage]
+    [setDocument]
   );
 
   const handleFile = useCallback(
@@ -47,16 +83,27 @@ export function PdfUploader() {
 
   const handleOpenRecent = useCallback(
     async (meta: PdfHistoryMeta) => {
-      setLoading(true);
+      // Large files are remembered but not stored — ask for the file again.
+      // Any recognised text for it is still cached, so it opens straight up.
+      if (!meta.hasData) {
+        setError(`"${meta.fileName}" is too large to keep in the browser — pick it again to reopen it.`);
+        inputRef.current?.click();
+        return;
+      }
+
+      setStatus('Opening PDF…');
       try {
         const data = await loadPdfData(meta.id);
         if (data) {
           await openPdfBuffer(data, meta.fileName);
+        } else {
+          setError('That file is no longer stored — pick it again to reopen it.');
+          setStatus(null);
         }
       } catch (e) {
         console.error('Failed to load recent PDF:', e);
-      } finally {
-        setLoading(false);
+        setError('Could not reopen that file.');
+        setStatus(null);
       }
     },
     [openPdfBuffer]
@@ -119,12 +166,14 @@ export function PdfUploader() {
           {loading ? (
             <div className="flex items-center gap-3 text-primary-600">
               <div className="w-5 h-5 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin" />
-              <span className="text-sm font-medium">Loading PDF...</span>
+              <span className="text-sm font-medium">{status}</span>
             </div>
           ) : (
             <div className="text-center">
               <p className="text-lg font-semibold text-slate-800">Drop a PDF here</p>
-              <p className="text-sm text-slate-500 mt-1">or click to browse files</p>
+              <p className="text-sm text-slate-500 mt-1">
+                Scanned books work too — the text is recognised as you read
+              </p>
             </div>
           )}
 
@@ -139,6 +188,10 @@ export function PdfUploader() {
             }}
           />
         </div>
+
+        {error && (
+          <p className="text-sm text-red-500 text-center -mt-4">{error}</p>
+        )}
 
         {/* Recent PDFs */}
         {recentPdfs.length > 0 && (
@@ -164,6 +217,11 @@ export function PdfUploader() {
                     </p>
                     <p className="text-[11px] text-slate-400">
                       {pdf.pageCount} pages · {timeAgo(pdf.lastOpened)}
+                      {!pdf.hasData && pdf.fileSize > 0 && (
+                        <span className="text-amber-500">
+                          {' '}· {formatSize(pdf.fileSize)}, re-pick to open
+                        </span>
+                      )}
                     </p>
                   </div>
                   <span

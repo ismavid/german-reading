@@ -136,20 +136,15 @@ const MARKERS: Record<string, Set<string>> = {
   ]),
 };
 
-export async function detectLanguage(doc: pdfjsLib.PDFDocumentProxy): Promise<SourceLanguage> {
-  const pagesToSample = Math.min(doc.numPages, 3);
-  let allText = '';
+/**
+ * Identify the language of a block of text.
+ *
+ * Split out from `detectLanguage` so the same scoring can run over OCR output:
+ * scanned books have no text layer to sample, so their text arrives from
+ * Tesseract instead of from pdf.js.
+ */
+export function detectLanguageFromText(allText: string): SourceLanguage {
   const scores = new Map<string, number>();
-
-  for (let i = 1; i <= pagesToSample; i++) {
-    const page = await doc.getPage(i);
-    const textContent = await page.getTextContent();
-
-    for (const item of textContent.items) {
-      if (!('str' in item) || !item.str.trim()) continue;
-      allText += item.str + ' ';
-    }
-  }
 
   // 1. Try script-based detection first (for non-Latin scripts)
   const scriptResult = detectByScript(allText);
@@ -179,4 +174,21 @@ export async function detectLanguage(doc: pdfjsLib.PDFDocumentProxy): Promise<So
   }
 
   return bestLang;
+}
+
+export async function detectLanguage(doc: pdfjsLib.PDFDocumentProxy): Promise<SourceLanguage> {
+  const pagesToSample = Math.min(doc.numPages, 3);
+  let allText = '';
+
+  for (let i = 1; i <= pagesToSample; i++) {
+    const page = await doc.getPage(i);
+    const textContent = await page.getTextContent();
+
+    for (const item of textContent.items) {
+      if (!('str' in item) || !item.str.trim()) continue;
+      allText += item.str + ' ';
+    }
+  }
+
+  return detectLanguageFromText(allText);
 }

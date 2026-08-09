@@ -2,6 +2,14 @@ import { create } from 'zustand';
 import type * as pdfjsLib from 'pdfjs-dist';
 import type { SourceLanguage, TargetLanguage } from '../types/word';
 
+interface OpenDocumentOptions {
+  /** Stable identity for the OCR cache — see `makeDocId`. */
+  docId: string;
+  /** True when the document has no text layer and needs OCR. */
+  isScanned: boolean;
+  sourceLanguage: SourceLanguage;
+}
+
 interface PdfState {
   document: pdfjsLib.PDFDocumentProxy | null;
   fileName: string;
@@ -9,7 +17,9 @@ interface PdfState {
   scale: number;
   sourceLanguage: SourceLanguage;
   targetLanguage: TargetLanguage;
-  setDocument: (doc: pdfjsLib.PDFDocumentProxy, name: string) => void;
+  docId: string;
+  isScanned: boolean;
+  setDocument: (doc: pdfjsLib.PDFDocumentProxy, name: string, options: OpenDocumentOptions) => void;
   setScale: (scale: number) => void;
   setSourceLanguage: (lang: SourceLanguage) => void;
   setTargetLanguage: (lang: TargetLanguage) => void;
@@ -31,9 +41,18 @@ export const usePdfStore = create<PdfState>()((set) => ({
   scale: 1.5,
   sourceLanguage: 'en',
   targetLanguage: loadTargetLanguage(),
+  docId: '',
+  isScanned: false,
 
-  setDocument: (doc, name) =>
-    set({ document: doc, fileName: name, numPages: doc.numPages }),
+  setDocument: (doc, name, { docId, isScanned, sourceLanguage }) =>
+    set({
+      document: doc,
+      fileName: name,
+      numPages: doc.numPages,
+      docId,
+      isScanned,
+      sourceLanguage,
+    }),
 
   setScale: (scale) => set({ scale }),
 
@@ -44,5 +63,13 @@ export const usePdfStore = create<PdfState>()((set) => ({
     set({ targetLanguage });
   },
 
-  reset: () => set({ document: null, fileName: '', numPages: 0, sourceLanguage: 'en' }),
+  reset: () =>
+    set({
+      document: null,
+      fileName: '',
+      numPages: 0,
+      sourceLanguage: 'en',
+      docId: '',
+      isScanned: false,
+    }),
 }));

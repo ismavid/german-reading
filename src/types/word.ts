@@ -44,6 +44,24 @@ export interface SavedWord {
   sourceLanguage?: SourceLanguage;
 }
 
+/**
+ * A hoverable word on a page.
+ *
+ * Coordinates are in unscaled PDF user units (i.e. a viewport at scale 1), NOT
+ * screen pixels. The renderer multiplies by the current zoom. Keeping them
+ * scale-free means zooming never invalidates a page's words — which matters a
+ * lot for OCR, where re-deriving them costs seconds rather than microseconds.
+ */
+export interface ExtractedWord {
+  word: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** OCR confidence 0-100. Absent for words read from a real text layer. */
+  confidence?: number;
+}
+
 export interface WordPosition {
   word: string;
   x: number;

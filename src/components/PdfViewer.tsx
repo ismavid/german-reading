@@ -1,5 +1,9 @@
+import { useEffect, useState } from 'react';
 import { usePdfStore } from '../store/pdfStore';
 import { PdfPage } from './PdfPage';
+
+/** A4 in points — a reasonable placeholder until page 1 reports its real size. */
+const FALLBACK_PAGE_SIZE = { width: 595, height: 842 };
 
 export function PdfViewer() {
   const document = usePdfStore((s) => s.document);
@@ -8,6 +12,22 @@ export function PdfViewer() {
   const setScale = usePdfStore((s) => s.setScale);
   const fileName = usePdfStore((s) => s.fileName);
   const reset = usePdfStore((s) => s.reset);
+
+  // Every page reserves space before it renders, so the scroll height is stable
+  // and pages don't jump around as they stream in. Page 1's size is a good
+  // enough estimate for a book.
+  const [defaultSize, setDefaultSize] = useState(FALLBACK_PAGE_SIZE);
+
+  useEffect(() => {
+    if (!document) return;
+    let cancelled = false;
+    document.getPage(1).then((page) => {
+      if (cancelled) return;
+      const viewport = page.getViewport({ scale: 1 });
+      setDefaultSize({ width: viewport.width, height: viewport.height });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [document]);
 
   if (!document) return null;
 
@@ -62,6 +82,7 @@ export function PdfViewer() {
             document={document}
             pageNumber={pageNum}
             scale={scale}
+            defaultSize={defaultSize}
           />
         ))}
       </div>
